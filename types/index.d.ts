@@ -1101,6 +1101,10 @@ declare module "jspdf" {
     // jsPDF plugin: JavaScript
     addJS(javascript: string): jsPDF;
 
+    // jsPDF plugin: layer
+    beginLayer(name: string): jsPDF;
+    endLayer(): jsPDF;
+
     // jsPDF plugin: split_text_to_size
     getCharWidthsArray(text: string, options?: any): any[];
     getStringUnitWidth(text: string, options?: any): number;

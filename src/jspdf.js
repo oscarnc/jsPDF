@@ -2355,6 +2355,12 @@ function jsPDF(options) {
     }
   };
 
+  var putPropertiesDict = function() {
+    out("/Properties <<");
+    events.publish("putPropertiesDict");
+    out(">>");
+  };
+
   var putGStatesDict = function() {
     if (Object.keys(gStates).length > 0) {
       var gStateKey;
@@ -2380,6 +2386,7 @@ function jsPDF(options) {
     putFontDict();
     putShadingPatternDict();
     putTilingPatternDict(objectIds.objectOid);
+    putPropertiesDict();
     putGStatesDict();
     putXobjectDict();
     out(">>");

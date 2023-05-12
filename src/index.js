@@ -13,6 +13,7 @@ import "./modules/filters.js";
 import "./modules/fileloading.js";
 import "./modules/html.js";
 import "./modules/javascript.js";
+import "./modules/layer.js";
 import "./modules/outline.js";
 import "./modules/jpeg_support.js";
 import "./modules/png_support.js";

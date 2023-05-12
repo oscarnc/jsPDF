@@ -1,7 +1,7 @@
 /** @license
  *
  * jsPDF - PDF Document creation from JavaScript
- * Version 2.5.1 Built on 2022-01-28T15:37:57.789Z
+ * Version 2.5.1 Built on 2023-05-12T05:20:23.272Z
  *                      CommitID 00000000
  *
  * Copyright (c) 2010-2021 James Hall <james@parall.ax>, https://github.com/MrRio/jsPDF
@@ -3200,6 +3200,12 @@
       }
     };
 
+    var putPropertiesDict = function putPropertiesDict() {
+      out("/Properties <<");
+      events.publish("putPropertiesDict");
+      out(">>");
+    };
+
     var putGStatesDict = function putGStatesDict() {
       if (Object.keys(gStates).length > 0) {
         var gStateKey;
@@ -3223,6 +3229,7 @@
       putFontDict();
       putShadingPatternDict();
       putTilingPatternDict(objectIds.objectOid);
+      putPropertiesDict();
       putGStatesDict();
       putXobjectDict();
       out(">>");
@@ -4573,19 +4580,21 @@
       }, options.flags);
       var wordSpacingPerLine = [];
 
+      var findWidth = function findWidth(v) {
+        return scope.getStringUnitWidth(v, {
+          font: activeFont,
+          charSpace: charSpace,
+          fontSize: activeFontSize,
+          doKerning: false
+        }) * activeFontSize / scaleFactor;
+      };
+
       if (Object.prototype.toString.call(text) === "[object Array]") {
         da = transformTextToSpecialArray(text);
         var newY;
 
         if (align !== "left") {
-          lineWidths = da.map(function (v) {
-            return scope.getStringUnitWidth(v, {
-              font: activeFont,
-              charSpace: charSpace,
-              fontSize: activeFontSize,
-              doKerning: false
-            }) * activeFontSize / scaleFactor;
-          });
+          lineWidths = da.map(findWidth);
         } //The first line uses the "main" Td setting,
         //and the subsequent lines are offset by the
         //previous line's x coordinate.
@@ -4639,6 +4648,34 @@
           for (var h = 0; h < len; h++) {
             text.push(da[h]);
           }
+        } else if (align === "justify" && activeFont.encoding === "Identity-H") {
+          // when using unicode fonts, wordSpacePerLine does not apply
+          text = [];
+          len = da.length;
+          maxWidth = maxWidth !== 0 ? maxWidth : pageWidth;
+          var backToStartX = 0;
+
+          for (var l = 0; l < len; l++) {
+            newY = l === 0 ? getVerticalCoordinate(y) : -leading;
+            newX = l === 0 ? getHorizontalCoordinate(x) : backToStartX;
+
+            if (l < len - 1) {
+              var spacing = scale((maxWidth - lineWidths[l]) / (da[l].split(" ").length - 1));
+              var words = da[l].split(" ");
+              text.push([words[0] + " ", newX, newY]);
+              backToStartX = 0; // distance to reset back to the left
+
+              for (var _i = 1; _i < words.length; _i++) {
+                var shiftAmount = (findWidth(words[_i - 1] + " " + words[_i]) - findWidth(words[_i])) * scaleFactor + spacing;
+                if (_i == words.length - 1) text.push([words[_i], shiftAmount, 0]);else text.push([words[_i] + " ", shiftAmount, 0]);
+                backToStartX -= shiftAmount;
+              }
+            } else {
+              text.push([da[l], newX, newY]);
+            }
+          }
+
+          text.push(["", backToStartX, 0]);
         } else if (align === "justify") {
           text = [];
           len = da.length;
@@ -16735,6 +16772,95 @@
           this.internal.out("/Names <</JavaScript " + jsNamesObj + " 0 R>>");
         }
       });
+      return this;
+    };
+  })(jsPDF.API);
+
+  /**
+   * @name layer
+   * @module
+   */
+
+  (function (jsPDFAPI) {
+
+    var namespace = "layer_";
+
+    var putCatalogCallback = function putCatalogCallback() {
+      var out = this.internal.write;
+      var groups = this.internal.collections[namespace + "groups"];
+
+      if (groups.length > 0) {
+        out("/OCProperties <<");
+        var groupIds = [];
+
+        for (var i = 0; i < groups.length; i++) {
+          groupIds.push(groups[i].id + " 0 R");
+        }
+
+        out("/OCGs [" + groupIds.join(" ") + "]");
+        out("/D << /BaseState /ON >>");
+        out(">>");
+      }
+    };
+
+    var putResourcesCallback = function putResourcesCallback() {
+      var out = this.internal.write;
+      var groups = this.internal.collections[namespace + "groups"];
+
+      for (var i = 0; i < groups.length; i++) {
+        groups[i].id = this.internal.newObject();
+        out("<<");
+        out("/Type /OCG");
+        out("/Name (" + groups[i].name + ")");
+        out(">>");
+        out("endobj");
+      }
+    };
+
+    var putPropertiesDictCallback = function putPropertiesDictCallback() {
+      var out = this.internal.write;
+      var groups = this.internal.collections[namespace + "groups"];
+
+      for (var i = 0; i < groups.length; i++) {
+        out("/OC" + (i + 1) + " " + groups[i].id + " 0 R");
+      }
+    };
+
+    var initialize = function initialize() {
+      if (!this.internal.collections[namespace + "groups"]) {
+        this.internal.collections[namespace + "groups"] = [];
+        this.internal.events.subscribe("putCatalog", putCatalogCallback);
+        this.internal.events.subscribe("putResources", putResourcesCallback);
+        this.internal.events.subscribe("putPropertiesDict", putPropertiesDictCallback);
+      }
+    };
+    /**
+     * @name beginLayer
+     * @function
+     * @param {string} name The name of the new layer.
+     * @returns {jsPDF}
+     */
+
+
+    jsPDFAPI.beginLayer = function beginLayer(name) {
+      initialize.call(this);
+      var groups = this.internal.collections[namespace + "groups"];
+      groups.push({
+        id: undefined,
+        name: name
+      });
+      this.internal.write("/OC /OC" + groups.length + " BDC");
+      return this;
+    };
+    /**
+     * @name endLayer
+     * @function
+     * @returns {jsPDF}
+     */
+
+
+    jsPDFAPI.endLayer = function endLayer() {
+      this.internal.write("EMC");
       return this;
     };
   })(jsPDF.API);
