@@ -3631,22 +3631,56 @@ function jsPDF(options) {
       }
     }
 
+    //angle
+    angle = options.angle;
+    var sin = 0;
+    var cos = 1;
+
+    if (transformationMatrix instanceof Matrix === false && angle && typeof angle === "number") {
+      angle *= Math.PI / 180;
+
+      if (options.rotationDirection === 0) {
+        angle = -angle;
+      }
+
+      if (apiMode === ApiMode.ADVANCED) {
+        angle = -angle;
+      }
+
+      sin = Math.sin(angle);
+      cos = Math.cos(angle);
+    }
+
     //baseline
     var height = activeFontSize / scope.internal.scaleFactor;
     var descent = height * (lineHeight - 1);
+    var dx = 0;
+    var dy = 0;
 
     switch (options.baseline) {
       case "bottom":
-        y -= descent;
+        dx = sin * descent;
+        dy = cos * descent;
+        x -= dx;
+        y -= dy;
         break;
       case "top":
-        y += height - descent;
+        dx = sin * (height - descent);
+        dy = cos * (height - descent);
+        x += dx;
+        y += dy;
         break;
       case "hanging":
-        y += height - 2 * descent;
+        dx = sin * (height - 2 * descent);
+        dy = cos * (height - 2 * descent);
+        x += dx;
+        y += dy;
         break;
       case "middle":
-        y += height / 2 - descent;
+        dx = sin * (height / 2 - descent);
+        dy = cos * (height / 2 - descent);
+        x += dx;
+        y += dy;
         break;
       case "ideographic":
       case "alphabetic":
@@ -3685,35 +3719,6 @@ function jsPDF(options) {
 
     text = payload.text;
     options = payload.options;
-
-    //angle
-    angle = options.angle;
-
-    if (
-      transformationMatrix instanceof Matrix === false &&
-      angle &&
-      typeof angle === "number"
-    ) {
-      angle *= Math.PI / 180;
-
-      if (options.rotationDirection === 0) {
-        angle = -angle;
-      }
-
-      if (apiMode === ApiMode.ADVANCED) {
-        angle = -angle;
-      }
-
-      var c = Math.cos(angle);
-      var s = Math.sin(angle);
-      transformationMatrix = new Matrix(c, s, -s, c, 0, 0);
-    } else if (angle && angle instanceof Matrix) {
-      transformationMatrix = angle;
-    }
-
-    if (apiMode === ApiMode.ADVANCED && !transformationMatrix) {
-      transformationMatrix = identityMatrix;
-    }
 
     //charSpace
 
@@ -3947,6 +3952,22 @@ function jsPDF(options) {
           posY
         ];
       });
+    }
+
+    //angle
+    if (transformationMatrix instanceof Matrix === false && angle && typeof angle === "number") {
+      var tx = lineWidths ? lineWidths[0] / 2 * scope.internal.scaleFactor : 0;
+      var ty = dy > 0 ? dy : 0;
+      var t1 = new Matrix(1, 0, 0, 1, tx, ty);
+      var t2 = new Matrix(1, 0, 0, 1, -tx, -ty);
+      const r = new Matrix(cos, sin, -sin, cos, 0, 0);
+      transformationMatrix = t1.multiply(r).multiply(t2);
+    } else if (angle && angle instanceof Matrix) {
+      transformationMatrix = angle;
+    }
+
+    if (apiMode === ApiMode.ADVANCED && !transformationMatrix) {
+      transformationMatrix = identityMatrix;
     }
 
     //creating Payload-Object to make text byRef
